@@ -1,0 +1,112 @@
+// ============================================================
+// Module: festa_hw_tb
+// Project: ASIC Hardware Accelerator for LiDAR Ground Segmentation
+// Description:
+//   Testbench for the top-level FESTA accelerator.
+//   Tests two cases:
+//     1. Ground point     (height = 30  → ground_flag expected HIGH)
+//     2. Non-ground point (height = 120 → ground_flag expected LOW)
+// ============================================================
+
+`timescale 1ns / 1ps
+
+module festa_hw_tb;
+
+    // --------------------------------------------------------
+    // DUT signals
+    // --------------------------------------------------------
+    reg        clk;
+    reg        rst;
+    reg signed [15:0] x_coord;
+    reg signed [15:0] y_coord;
+    reg        [15:0] point_height;
+    reg               point_valid;
+
+    wire              ground_flag;
+    wire              output_valid;
+
+    // --------------------------------------------------------
+    // DUT instantiation
+    // --------------------------------------------------------
+    festa_hw DUT (
+        .clk         (clk),
+        .rst         (rst),
+        .x_coord     (x_coord),
+        .y_coord     (y_coord),
+        .point_height(point_height),
+        .point_valid (point_valid),
+        .ground_flag (ground_flag),
+        .output_valid(output_valid)
+    );
+
+    // --------------------------------------------------------
+    // Clock generation: 100 MHz (10ns period)
+    // --------------------------------------------------------
+    always #5 clk = ~clk;
+
+    // --------------------------------------------------------
+    // Stimulus
+    // --------------------------------------------------------
+    initial begin
+        // Initialise
+        clk         = 0;
+        rst         = 1;
+        point_valid = 0;
+        x_coord     = 0;
+        y_coord     = 0;
+        point_height = 0;
+
+        // Hold reset for 2 cycles
+        #20;
+        rst = 0;
+
+        // --- Test 1: Ground point (height = 30, threshold = 50) ---
+        // Expected: ground_flag = 1
+        #10;
+        x_coord      = 16'sd10;
+        y_coord      = 16'sd20;
+        point_height = 16'd30;
+        point_valid  = 1;
+        #10;
+        point_valid  = 0;
+        #20;
+        $display("[TEST 1] Ground point    | height=30  | ground_flag=%b (expected 1)", ground_flag);
+
+        // --- Test 2: Non-ground point (height = 120, threshold = 50) ---
+        // Expected: ground_flag = 0
+        #10;
+        x_coord      = 16'sd15;
+        y_coord      = 16'sd25;
+        point_height = 16'd120;
+        point_valid  = 1;
+        #10;
+        point_valid  = 0;
+        #20;
+        $display("[TEST 2] Non-ground point | height=120 | ground_flag=%b (expected 0)", ground_flag);
+
+        // --- Test 3: Out-of-bounds point ---
+        // Expected: index_valid = 0, output_valid = 0
+        #10;
+        x_coord      = 16'sd200;   // outside 64x64 grid
+        y_coord      = 16'sd200;
+        point_height = 16'd10;
+        point_valid  = 1;
+        #10;
+        point_valid  = 0;
+        #20;
+        $display("[TEST 3] Out-of-bounds    | x=200,y=200 | output_valid=%b (expected 0)", output_valid);
+
+        #100;
+        $display("Simulation complete.");
+        $finish;
+    end
+
+    // --------------------------------------------------------
+    // Waveform dump (for GTKWave or Vivado)
+    // --------------------------------------------------------
+    initial begin
+        $dumpfile("festa_hw_tb.vcd");
+        $dumpvars(0, festa_hw_tb);
+    end
+
+endmodule
