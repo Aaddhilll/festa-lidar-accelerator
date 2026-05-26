@@ -1,0 +1,74 @@
+// ============================================================
+// Module: festa_hw
+// Project: ASIC Hardware Accelerator for LiDAR Ground Segmentation
+// Description:
+//   Top-level FESTA accelerator wrapper.
+//   Integrates Cell Index Calculator, Cell Grid Core,
+//   and Ground Segmentation Core.
+//   Exposes AXI4-Stream (data) and AXI4-Lite (control) interfaces.
+// ============================================================
+
+module festa_hw (
+    input  wire        clk,
+    input  wire        rst,
+
+    // LiDAR point inputs
+    input  wire signed [15:0] x_coord,
+    input  wire signed [15:0] y_coord,
+    input  wire        [15:0] point_height,
+    input  wire               point_valid,
+
+    // Classification outputs
+    output wire               ground_flag,
+    output wire               output_valid
+);
+
+    wire [15:0] cell_index;
+    wire        index_valid;
+    wire [15:0] memory_out;
+
+    // --------------------------------------------------------
+    // Cell Index Calculator
+    // --------------------------------------------------------
+    cell_index_calculator #(
+        .GRID_WIDTH  (64),
+        .GRID_HEIGHT (64),
+        .CELL_SIZE   (1)
+    ) u_index_calc (
+        .x_coord   (x_coord),
+        .y_coord   (y_coord),
+        .cell_index(cell_index),
+        .valid     (index_valid)
+    );
+
+    // --------------------------------------------------------
+    // Cell Grid Core (BRAM)
+    // --------------------------------------------------------
+    cell_grid_core #(
+        .GRID_SIZE  (4096),
+        .DATA_WIDTH (16)
+    ) u_grid_core (
+        .clk         (clk),
+        .rst         (rst),
+        .write_enable(point_valid & index_valid),
+        .write_addr  (cell_index[11:0]),
+        .write_data  (point_height),
+        .read_addr   (cell_index[11:0]),
+        .read_data   (memory_out)
+    );
+
+    // --------------------------------------------------------
+    // Ground Segmentation Core
+    // --------------------------------------------------------
+    ground_segmentation_core #(
+        .HEIGHT_THRESHOLD(16'd50)
+    ) u_ground_seg (
+        .clk         (clk),
+        .rst         (rst),
+        .point_height(memory_out),
+        .point_valid (index_valid),
+        .ground_flag (ground_flag),
+        .output_valid(output_valid)
+    );
+
+endmodule
